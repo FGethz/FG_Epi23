@@ -1,0 +1,12 @@
+---
+title: "assignment.Rmd"
+author: "Felix Gerbaldo"
+date: "1 3 2023"
+output: html_document
+---
+
+```{r}
+library(epiwraps)
+sessionInfo()
+```
+
