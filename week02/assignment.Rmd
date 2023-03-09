@@ -1,0 +1,60 @@
+---
+title: "assignment.Rmd"
+author: "Felix Gerbaldo"
+date: "7 3 2023"
+output: html_document
+---
+
+```{r}
+library(AnnotationHub)
+ah <- AnnotationHub()
+```
+
+```{r}
+# Getting Mus Musculus EnsDb object version 102, genome build GRCm38
+
+AnnotationHub::query(ah, c("mus musculus", "GRCm38", "EnsDb"))
+mousem38 <- ah[["AH89211"]]
+```
+```{r}
+# Getting mouse genome sequence in 2bit format for GRCm38
+
+AnnotationHub::query(ah, c("mus musculus", "GRCm38", "dna_sm", "2bit"))
+mousem382bit <- ah[["AH88477"]]
+mouse_seq_from_2bit <- getSeq(mousem382bit)
+```
+
+```{r}
+# Getting Dr. M. sequence in 2bit format for BDGP6
+
+AnnotationHub::query(ah, c("drosophila melanogaster", "dna_sm", "2bit", "BDGP6"))
+
+DM2bit <- ah[["AH90691"]]
+```
+
+```{r}
+# For MM EnsDb object
+# How many different ensembl gene IDs and gene symbols are there for protein-coding genes?
+
+# First, I'd like to have the number of all genes contained
+length(genes(mousem38))
+```
+
+```{r}
+# Now with the filter:
+length(genes(mousem38, filter=GeneBiotypeFilter("protein_coding")))
+```
+
+```{r}
+# plotting the distribution of the spliced length of protein coding transcripts
+
+mouse_exs <- exonsBy(mousem38, column=c("tx_id", "tx_biotype"),
+                  filter=TxBiotypeFilter("protein_coding"))
+
+txwidths <- c()
+for (i in seq_along(names(mouse_exs))){
+  txwidths <- append(txwidths,sum(width(mouse_exs[[i]])))
+}
+
+hist(txwidths, breaks = 10000, xlim = c(0, 10000))
+```
