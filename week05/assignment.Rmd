@@ -1,0 +1,119 @@
+---
+title: "assignment"
+author: "Felix Gerbaldo"
+date: "30 3 2023"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+  library(ensembldb)
+  library(AnnotationFilter)
+  library(GenomicRanges)
+})
+```
+
+
+```{r}
+H3K27me3_peaks <- rtracklayer::import("./H3K27me3/ENCFF105NKG.bed.gz", format ="narrowPeak")
+H3K4me3_peaks <- rtracklayer::import("./H3K4me3/ENCFF247GVM.bed.gz", format ="narrowPeak")
+
+# BD = bivalent domains
+
+BD <- overlapsAny(H3K27me3_peaks, H3K4me3_peaks)
+table(BD) # Those are the numbers of overlapping peaks
+```
+
+Now additionally split those into those that overlap a TSS and those that dont:
+
+```{r}
+ah <- AnnotationHub()
+query(ah, c("mus musculus", "GRCm38", "EnsDb"))
+mm10 <- ah[["AH89211"]]
+
+seqlevelsStyle(H3K27me3_peaks) = "ensembl"
+H3K27me3anno <- epiwraps::annotateRegions(H3K27me3_peaks, mm10)
+
+seqlevelsStyle(H3K4me3_peaks) = "ensembl"
+H3K4me3anno <- epiwraps::annotateRegions(H3K4me3_peaks, mm10)
+```
+
+```{r}
+H3K27me3TSS <- subset(H3K27me3anno, H3K27me3anno$class == "TSS")
+H3K4me3TSS <- subset(H3K4me3anno, H3K4me3anno$class == "TSS")
+BDTSS <- overlapsAny(H3K27me3TSS, H3K4me3TSS)
+table(BDTSS) # When looking at those peaks that are also part of a TSS, the larger proportion have an H3K4me3 H3K27me3 overlap
+```
+```{r}
+H3K27me3noTSS <- subset(H3K27me3anno, H3K27me3anno$class != "TSS")
+H3K4me3noTSS <- subset(H3K4me3anno, H3K4me3anno$class != "TSS")
+BDnoTSS <- overlapsAny(H3K27me3noTSS, H3K4me3noTSS)
+table(BDnoTSS) # Here, the opposite is the case 
+```
+What happens to those regions upon differentiation?
+
+```{r}
+liverK27 <- rtracklayer::import("./liver/H3K27me3/ENCFF900AWR.bed.gz", format ="narrowPeak")
+liverK4 <- rtracklayer::import("./liver/H3K4me3/ENCFF459HSF.bed.gz", format ="narrowPeak")
+```
+
+How many of the mESC bivalent domains are in this differentiated celltype, overlapping either mark or their combination?
+
+```{r}
+BDranges <- GenomicRanges::intersect(H3K27me3_peaks, H3K4me3_peaks)
+seqlevelsStyle(liverK27) = "ensembl"
+BDliverK27 <- overlapsAny(BDranges, liverK27)
+table(BDliverK27) # BD from mESCs overlapping with H3K27me3 mark in hepatocytes
+```
+
+```{r}
+seqlevelsStyle(liverK4) = "ensembl"
+BDliverK4 <- overlapsAny(BDranges, liverK4)
+table(BDliverK4) # BD from mESCs overlapping with H3K4me3 mark in hepatocytes
+```
+
+```{r}
+BDboth <- overlapsAny(BDranges, liverK4) & overlapsAny(BDranges, liverK27)
+table(BDboth) # BD from mESCs overlapping with both marks in hepatocytes
+```
+Now doing the same thing but only looking at the TSS
+
+```{r}
+BDTSSranges <- GenomicRanges::intersect(H3K27me3TSS, H3K4me3TSS)
+BDnoTSSranges <- GenomicRanges::intersect(H3K27me3noTSS, H3K4me3noTSS)
+```
+
+```{r}
+TSSLK27 <- overlapsAny(BDTSSranges, liverK27)
+table(TSSLK27) # BD in TSS from mESCs overlapping with H3K27me3 mark in hepatocytes
+```
+```{r}
+TSSLK4 <- overlapsAny(BDTSSranges, liverK4)
+table(TSSLK4) # BD in TSS from mESCs overlapping with H3K4me3 mark in hepatocytes
+```
+
+```{r}
+BDLTSSboth <- overlapsAny(BDTSSranges, liverK4) & overlapsAny(BDTSSranges, liverK27)
+table(BDLTSSboth) # BD in TSS from mESCs overlapping with both marks in hepatocytes
+```
+
+```{r}
+noTSSLK27 <- overlapsAny(BDnoTSSranges, liverK27)
+table(noTSSLK27) # BD outside TSS from mESCs overlapping with H3K27me3 mark in hepatocytes
+```
+
+```{r}
+noTSSLK4 <- overlapsAny(BDnoTSSranges, liverK4)
+table(noTSSLK4) # BD outside TSS from mESCs overlapping with H3K4me3 mark in hepatocytes
+```
+
+```{r}
+BDLnoTSSboth <- overlapsAny(BDnoTSSranges, liverK4) & overlapsAny(BDnoTSSranges, liverK27)
+table(BDLnoTSSboth) # BD oustide TSS from mESCs overlapping with both marks in hepatocytes
+```

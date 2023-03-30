@@ -58,3 +58,18 @@ for (i in seq_along(names(mouse_exs))){
 
 hist(txwidths, breaks = 10000, xlim = c(0, 10000))
 ```
+
+```{r}
+# This is a better - more efficient - solution
+
+exs <- exonsBy(mousem38,
+               column=c("tx_id", "tx_biotype"),
+               filter= TxBiotypeFilter("protein_coding"))
+
+ew <- width(exs)
+tl <- sum(ew)
+hist(tl, breaks=10000, xlim = c(0,10000))
+
+ew
+```
+
