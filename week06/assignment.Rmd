@@ -1,0 +1,91 @@
+---
+title: "assignment"
+author: "Felix Gerbaldo"
+date: "12 4 2023"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(GenomicRanges)
+  library(ggplot2)
+  library(memes) # for the meme-based methods -- COMMENT OUT when using alternatives
+  library(motifmatchr)
+  library(Biostrings) # for handling sequences
+  library(MotifDb) # database of motifs
+  library(TFBSTools) # for handling some motif formats
+  library(universalmotif) # for converting motifs to various formats
+  library(PWMEnrich)
+  # for R-based motif enrichment analysis
+  library(BSgenome.Mmusculus.UCSC.mm10)
+})
+```
+
+
+Choose a transcription factor, e.g. CREB1, REST, GATA5, EGR1, GCR
+
+```{r}
+# REST
+RESTmotifs <- query(MotifDb, "REST")
+RESTmotif <- RESTmotifs[["Mmusculus-HOCOMOCOv10-REST_MOUSE.H10MO.A"]]
+view_motifs(RESTmotif)
+```
+
+Download the (e.g. Mouse) peaks for that factor (whatever cell type)
+
+```{r eval = FALSE}
+download.file("https://www.encodeproject.org/files/ENCFF368VWJ/@@download/ENCFF368VWJ.bed.gz", dest="raw/REST.bed.gz")
+```
+
+Identify the instances of the factor’s motif
+
+```{r}
+# All motif instances within the peaks:
+peaks <- rtracklayer::import("raw/REST.bed.gz", format="NarrowPeak")
+peak_centers <- resize(peaks, fix="center", width=100)
+genome <- BSgenome.Mmusculus.UCSC.mm10
+peak_seqs <- get_sequence(peak_centers, genome)
+
+moi_peaks <- runFimo(peak_seqs, 
+                convert_motifs(RESTmotif), 
+                meme_path="/common/meme/bin/")
+length(moi_peaks)
+```
+
+
+```{r eval = FALSE}
+# All motif instances within the mm10 genome
+# Since this runs quite long, I saved the readout so I dont have to render it again.
+genome_seqs <- getSeq(genome)
+moi_genome <- runFimo(genome_seqs, 
+                convert_motifs(RESTmotif), 
+                meme_path="/common/meme/bin/")
+saveRDS(moi_genome, "moi_genome")
+```
+
+
+```{r}
+moi_genome <- readRDS("moi_genome")
+length(moi_genome)
+```
+
+Of all the peaks, what proportion contains a motif for the factor?
+
+```{r}
+peaks_w_motif <- peaks[overlapsAny(peaks,moi_peaks)]
+perc_of_peaks_w_motif <- length(peaks_w_motif)/length(peaks)
+
+print(paste0("Of the ", length(peaks), " peaks, ", length(peaks_w_motif), " (", round(perc_of_peaks_w_motif*100, 2), "%) contain a motif"))
+```
+
+Of all instances of that motif in the genome (or in one chromosome), what proportion is bound
+by the factor (i.e. has a peak)?
+
+```{r}
+motif_w_peak <- moi_genome[overlapsAny(moi_genome,peaks)]
+perc_of_motifs_w_peak <- length(motif_w_peak)/length(moi_genome)
+
+print(paste0("Of the ", length(moi_genome), " motif instances in the genome, ", length(motif_w_peak), " (", round(perc_of_motifs_w_peak*100, 2), "%) overlap a peak"))
+```
+
