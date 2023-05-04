@@ -1,0 +1,114 @@
+---
+title: "assignment"
+author: "Felix Gerbaldo"
+date: "3 5 2023"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(sechm)
+  library(BiocParallel)
+  library(ggplot2)
+  library(chromVAR) # for motif accessibility estimation
+  library(SummarizedExperiment) # data structure
+  library(limma) # for statistical analysis
+  library(BSgenome.Mmusculus.UCSC.mm10)
+})
+# to control multithreading, unix users can use:
+register(MulticoreParam(4))
+```
+
+
+perform a chromVAR motif analysis, and run 2 differential motif accessibility analyses, respectively:
+1. comparing stressed (denoted ‘FSS’ – forced swim stress) and control animals
+2. comparing male and female animals
+
+```{r}
+data <- readRDS("mouse_mm38_hippocampus.peakCounts.SE.rds")
+
+motifs <- query(MotifDb, c("HOCOMOCOv11-core", "Hsapiens"))
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(
+           universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"),
+           mcols(motifs)$geneSymbol))
+
+genome <- Rsamtools::FaFile("/mnt/reference/reference/Mus_musculus/Ensembl/GRCm38/Sequence/WholeGenomeFasta/Mus_musculus.GRCm38.dna_sm.primary_assembly.fa")
+
+data <- chromVAR::addGCBias(data, genome=genome)
+
+moi <- motifmatchr::matchMotifs(motifs, subject=data, genome=genome)
+
+dev <- chromVAR::computeDeviations(object = data, annotations=moi,    background_peaks=getBackgroundPeaks(data, niterations=1000))
+
+variability <- computeVariability(dev)
+plotVariability(variability)
+```
+
+```{r}
+assays(dev)$norm <- scale(assays(dev)$z)
+dev$condition <- c("CTRL", 
+                   "CTRL",
+                   "CTRL", 
+                   "CTRL", 
+                   "CTRL", 
+                   "CTRL", 
+                   "FSS",
+                   "FSS",
+                   "FSS",
+                   "FSS",
+                   "FSS",
+                   "FSS")
+
+dev$sex <- c("F", 
+             "F",
+             "F", 
+             "M",
+             "M",
+             "M",
+             "F", 
+             "F", 
+             "F", 
+             "M",
+             "M",
+             "M")
+colData(dev)
+```
+
+For each analysis, report the top most significant motifs, plot a heatmap of the normalized accessibility scores across the samples for those motifs, and write a short paragraph interpreting the results.
+
+```{r}
+mm <- model.matrix(~dev$condition)
+
+fit <- eBayes(lmFit(assays(dev)$norm, mm))
+
+res <- as.data.frame(topTable(fit, number = Inf))
+head(res)
+res$TF <- row.names(res)
+ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+```
+
+```{r}
+sechm(dev, features = head(row.names(res)), assayName="norm", top_annotation = c("condition", "sex"))
+```
+
+Comparing the two experimental conditions with each other, only two TFs are identified as significantly differentially accessible. The upregulation of the GCR makes sense given its involvement in both short and long-term adaptations in response to stressors (according to Wikipedia..). PRGR likely only came up due to the high similarity between the two TFs binding motifs. 
+
+```{r}
+mm <- model.matrix(~dev$sex)
+
+fit <- eBayes(lmFit(assays(dev)$norm, mm))
+
+res <- as.data.frame(topTable(fit, number = Inf))
+head(res)
+res$TF <- row.names(res)
+ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+```
+
+```{r}
+sechm(dev, features = head(row.names(res)), assayName="norm", top_annotation = c("sex", "condition"))
+```
+Comparing males and females, several zinc finger proteins (ZFP42, TYY1, Z324A, ZN384) come up as significantly differentially active as well as the TF THAP1. The two most significant findings (ZFP42 and TYY1) are both involved in cell differentiation, suggesting that the cells obtained might have differed in their overall developmental state between male and female mice at the time the experiment was conducted. 
